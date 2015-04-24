@@ -1,0 +1,8 @@
+﻿{
+    "ServerName": "localhost",
+    "username": "aauser",
+    "password": "Abc1234",
+    "ReadOnly": "false",
+    "StoreForwardPath": "c:\\sf",
+    "StoreForwardFreeDiskSpace": "1024"
+}

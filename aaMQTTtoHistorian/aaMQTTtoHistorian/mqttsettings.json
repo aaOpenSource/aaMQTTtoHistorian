@@ -1,0 +1,7 @@
+﻿{
+    "host": "localhost",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "clientid": "SP2014R2_DEV2_TEST123"
+}

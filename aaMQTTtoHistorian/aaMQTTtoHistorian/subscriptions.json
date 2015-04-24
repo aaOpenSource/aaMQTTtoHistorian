@@ -1,0 +1,44 @@
+{
+    "subscribetags": [
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[1]/value",            
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value1",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[2]/value",            
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value2",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[3]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value3",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[4]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value4",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[5]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value5",
+                "TagDataType": "6"
+            }
+        }
+    ]
+}
