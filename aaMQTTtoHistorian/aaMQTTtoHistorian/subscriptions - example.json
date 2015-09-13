@@ -1,0 +1,66 @@
+{
+    "subscribetags": [
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[1]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value1",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[2]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value2",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[3]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value3",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/TEST/Area_001/Rnd.Values[4]/value",
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "Random.Value4",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/#",
+            "regexmatch": "/data/(?<Galaxy>.*)/(?<Area>.*)/(?<Tag>.*)/(?<Measurement>.*)",
+            "useregex": true,
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "${Galaxy}.${Tag}",
+                "TagDataType": "6"
+            }
+        },
+        {
+            "topic": "/data/#",
+            "regexmatch": "/data/(?<Galaxy>.*)/(?<Area>.*)/(?<Tag>.*)/(?<Measurement>.*)",
+            "useregex": true,
+            "qoslevel": "0",
+            "historianTag": {
+                "TagName": "${Galaxy}.${Tag}",
+                "TagDataType": "6"
+            }
+        }
+    ],
+    "topicnamereplacements": [
+        {
+            "find": "[",
+            "replace": "_"
+        },
+                {
+            "find": "]",
+            "replace": "_"
+        }
+    ]
+}
