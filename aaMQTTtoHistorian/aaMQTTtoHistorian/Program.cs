@@ -9,6 +9,7 @@ using ArchestrA.MxAccess;
 using Newtonsoft.Json;
 using ArchestrA;
 using System.Threading;
+using System.Text.RegularExpressions;
 
 
 [assembly: log4net.Config.XmlConfigurator(ConfigFile = "log.config", Watch = true)]
@@ -29,6 +30,16 @@ namespace aaMQTTtoHistorian
         //queued messages with timestamps
         private static Queue<TimestampedMqttMsgPublishEventArgs> _messageQueue;
 
+        ////timer for sending historian data values
+        //private static Timer _historianQueueTimer;
+
+        //private static int _totalTime;
+        //private static int _timeCount;
+
+
+        private static System.Diagnostics.Stopwatch sw;
+
+
         static void Main(string[] args)
         {
             try
@@ -36,11 +47,19 @@ namespace aaMQTTtoHistorian
                 log.Info("Starting " + System.AppDomain.CurrentDomain.FriendlyName);
 
                 _HistorianTags = new SubscriptionList();
+                _HistorianTags = JsonConvert.DeserializeObject<SubscriptionList>(System.IO.File.ReadAllText("subscriptions.json"));
+
                 _historian = new HistorianAccess();
                 _messageQueue = new Queue<TimestampedMqttMsgPublishEventArgs>();
+
+                //_historianQueueTimer = new Timer(HistorianQueueTimerTick, null,0,1000);
+
+                sw = new System.Diagnostics.Stopwatch();
+                //_timeCount = 0;
+                //timings = new List<float>();
               
                 ConnectHistorian(_historian);
-                SetupHistorianTags();
+                AddHistorianTags();
                 ConnectMQTT();  
 
                 Console.ReadLine();
@@ -59,19 +78,21 @@ namespace aaMQTTtoHistorian
             }
         }
 
-        private static void SetupHistorianTags()
+        private static void HistorianQueueTimerTick(object state)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void AddHistorianTags()
         {
             HistorianAccessError error;
 
             try
             {
-                log.Info("Setting up historian tags");
+                log.Info("Adding defined historian tags");
 
-                _HistorianTags = JsonConvert.DeserializeObject<SubscriptionList>(System.IO.File.ReadAllText("subscriptions.json"));
-
-                // First add the tags all together.
-                // It shoudl be dramatically faster to add all tags then 
-                foreach (subscription localSubscription in _HistorianTags.subscribetags)
+                // Add all of the tags.  Separate logic will check to make sure the tag is ready before writing
+                foreach (subscription localSubscription in _HistorianTags.subscribetags.Where(s => s.useregex.Equals(false)))
                 {
                     log.DebugFormat("Adding tag {0}", localSubscription.historianTag.TagName);
                     UInt32 tagKey;                    
@@ -85,47 +106,6 @@ namespace aaMQTTtoHistorian
                         localSubscription.historianTag.TagKey = tagKey;
                     }
                 }
-
-                //Now start checking the status for each tag
-                foreach (subscription localSubscription in _HistorianTags.subscribetags)
-                {
-                    log.DebugFormat("Checking tag status of tag key {0}...", localSubscription.historianTag.TagKey);
-
-                    HistorianTagStatus tagStatus = new HistorianTagStatus();
-                    tagStatus.TagName = localSubscription.historianTag.TagName;
-
-                    for (; ; )
-                    {
-                        _historian.GetTagStatusByName(ref tagStatus);
-                        if (tagStatus.Pending)
-                        {
-                            log.DebugFormat("Tag status is not determined yet");
-                            Thread.Sleep(1000);
-                            continue;
-                        }
-                        if (tagStatus.ErrorOccurred)
-                            log.DebugFormat("Tag creation error: {0}", tagStatus.Error.ErrorDescription);
-                        else
-                            log.DebugFormat("Tag {0} added successfully", localSubscription.historianTag.TagName);
-                        break;
-                    }
-
-                    log.DebugFormat("Getting tag metadata from historian server for " + localSubscription.historianTag.TagName);
-
-                    HistorianTag serverTag;
-                    if (!_historian.GetTagInfoByName(localSubscription.historianTag.TagName, true, out serverTag, out error))
-                        Console.WriteLine("Server tag query error: {0}", error.ErrorDescription);
-                    else
-                    {
-                        log.DebugFormat("Tag Name           = {0}", serverTag.TagName);
-                        log.DebugFormat("Tag Description    = {0}", serverTag.TagDescription);
-                        log.DebugFormat("Tag Data Type      = {0}", serverTag.TagDataType);
-                        log.DebugFormat("Tag Storage Type   = {0}", serverTag.TagStorageType);
-                        log.DebugFormat("Tag Channel Status = {0}", serverTag.TagChannelStatus);
-
-                        localSubscription.historianTag = serverTag;
-                    }
-                }
             }
             catch(Exception ex)
             {
@@ -134,20 +114,45 @@ namespace aaMQTTtoHistorian
 
         }
 
+        static bool TagIsReady(string tagName)
+        {
+            bool returnValue = false;
+
+            try
+            {
+                // Check to see if we already konw the tag is ready
+                returnValue = _HistorianTags.subscribetags.Single(s => s.historianTag.TagName.Equals(tagName)).tagisready;
+
+                //We have not registered that the tag is ready so go check again
+                if (!returnValue)
+                {
+                    HistorianTagStatus tagStatus = new HistorianTagStatus();
+                    tagStatus.TagName = tagName;
+
+                    _historian.GetTagStatusByName(ref tagStatus);
+
+                    returnValue = !(tagStatus.Pending | tagStatus.ErrorOccurred);
+
+                    //If it comes back ready then stick that back into the object for cacheing
+                    if(returnValue)
+                    {
+                        _HistorianTags.subscribetags.Single(s => s.historianTag.TagName.Equals(tagName)).tagisready = returnValue;
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+                log.Error(ex);
+                returnValue = false;
+            }
+
+            return returnValue;
+
+        }
+
         static void ConnectHistorian(HistorianAccess historian)
         {
-            //HistorianConnectionArgs connectionArgs = new HistorianConnectionArgs();
-            // provide historian network name and user credentials
-            //connectionArgs.ServerName = "HistorianComputer";
-            //connectionArgs.UserName = "MyDomain\\MyUserName";
-            //connectionArgs.Password = "MyPassword";
-            //// we will be creating tags and sending data
-            //connectionArgs.ReadOnly = false;
-            //// collect data locally in folder C:\\StoreForward if historian is offline
-            ////connectionArgs.StoreForwardPath = "C:\\StoreForward";
-            //// collect data locally until 1GB of free disk space left on drive C
-            ////connectionArgs.StoreForwardFreeDiskSpace = 1024;
-
+           
             HistorianConnectionArgs connectionArgs = JsonConvert.DeserializeObject<HistorianConnectionArgs>(System.IO.File.ReadAllText("historianconnectionsettings.json"));
 
             Console.WriteLine("Initiating asynchronous historian connection, please wait...");
@@ -191,10 +196,14 @@ namespace aaMQTTtoHistorian
         {
             Console.WriteLine("Closing connection, please wait...");
             HistorianAccessError error;
-            if (!historian.CloseConnection(out error))
+
+            if (historian != null)
             {
-                Console.WriteLine("Failed to close historian connection: {0} {1} {2}",
-                    error.ErrorType, error.ErrorCode, error.ErrorDescription);
+                if (!historian.CloseConnection(out error))
+                {
+                    Console.WriteLine("Failed to close historian connection: {0} {1} {2}",
+                        error.ErrorType, error.ErrorCode, error.ErrorDescription);
+                }
             }
         }
 
@@ -307,8 +316,14 @@ namespace aaMQTTtoHistorian
         {
             try
             {
-                //log.Info(e.Topic + " " + System.Text.ASCIIEncoding.UTF8.GetString(e.Message));
+                //sw.Restart();
+               
                 SendDataToHistorian(e);
+
+                //sw.Stop();
+
+                //log.Info(sw.ElapsedTicks.ToString());
+
             }
             catch (Exception ex)
             {
@@ -316,11 +331,12 @@ namespace aaMQTTtoHistorian
             }
         }
 
-        private static void SendDataToHistorian(uPLibrary.Networking.M2Mqtt.Messages.MqttMsgPublishEventArgs e )
+        private static void SendDataToHistorian(uPLibrary.Networking.M2Mqtt.Messages.MqttMsgPublishEventArgs e, bool dataFromQueue = false)
         {
             HistorianAccessError error;
             Double localValue;
             Boolean result;
+            UInt32 tagKey = 0;
 
             try
             {
@@ -332,9 +348,33 @@ namespace aaMQTTtoHistorian
                     return;
                 }
 
-                UInt32 tagKey = _HistorianTags.subscribetags.Find(t => t.topic.Equals(e.Topic)).historianTag.TagKey;
+                // First look for an exact match, no regex
+                try
+                {
+                    tagKey = _HistorianTags.subscribetags.Single(t => t.topic.Equals(e.Topic) && t.useregex == false).historianTag.TagKey;
+                }
+                catch
+                {
+                    // Couldn't find it or some other isse so set to 0 so the next codeset can try                
+                    tagKey = 0;
+                }
 
+
+                if (tagKey == 0)
+                {
+                    tagKey = GetHistorianTagKey(e.Topic);
+                }
+
+                // If we still have tag key of 0 then just queue it and proces later
                 if(tagKey == 0)
+                {
+                    // Put the message in the queue
+                    _messageQueue.Enqueue(new TimestampedMqttMsgPublishEventArgs(e));
+                    return;
+                }
+
+                // Finally check to make sure the tag is ready.  If it is not then just queue the message
+                if (!TagIsReady(_HistorianTags.subscribetags.FirstOrDefault(t => t.historianTag.TagKey.Equals(tagKey)).historianTag.TagName))
                 {
                     // Put the message in the queue
                     _messageQueue.Enqueue(new TimestampedMqttMsgPublishEventArgs(e));
@@ -347,7 +387,7 @@ namespace aaMQTTtoHistorian
                 myVTQ.TagKey = tagKey;
                 myVTQ.DataValueType =  _HistorianTags.subscribetags.Find(x => x.topic.Equals(e.Topic)).historianTag.TagDataType;
                 myVTQ.OpcQuality = 192;
-
+ 
                 if(Double.TryParse(messageValue,out localValue))
                 {
                     myVTQ.Value = localValue;
@@ -428,9 +468,65 @@ namespace aaMQTTtoHistorian
             
             try
             {
-                // Get the server tag from the in memory object
-                //settingsServerTag = _MXAccessSettings.subscribetags.Find(x => x.hitem.Equals(hitem)).historianTag;
-                settingsServerTag = _HistorianTags.subscribetags.Find(x => x.topic.Equals(topic)).historianTag;
+                try
+                {
+                    // Get the server tag from the in memory object                
+                    settingsServerTag = _HistorianTags.subscribetags.First(x => x.topic.Equals(topic)).historianTag;
+                }
+                catch
+                {
+                    // explicity set to null b/c we didn't find it
+                    settingsServerTag = null;
+                }
+                                
+                // If we can't locate then try to process via regex
+                if(settingsServerTag == null)
+                {
+                    // Get all entries where useregex is True
+                    foreach (subscription localSubscription in _HistorianTags.subscribetags.Where(u => u.useregex).ToList())
+                    {
+                        //Attempt to match the tagName using the regex
+                        Regex testReg = new Regex(localSubscription.regexmatch);
+                        if (testReg.IsMatch(topic))
+                        {
+                            string newTagName = testReg.Replace(topic, localSubscription.historianTag.TagName);
+
+                            // Iterate through the topic name replacements to make sure we don't pass through any bad characters
+                            foreach (topicnamereplacement tnr in _HistorianTags.topicnamereplacements)
+                            {
+                                newTagName = newTagName.Replace(tnr.find, tnr.replace);
+                            }
+
+                            // Push this tag back into the tags list so we can cache this information for future processing
+                            subscription newSubscription = new subscription();
+
+                            // First copy the existing local subscription
+                            newSubscription = ObjectExtension.CopyObject<subscription>(localSubscription);
+
+                            // Replace key values with this specific tag's information
+                            newSubscription.topic = topic;
+                            newSubscription.historianTag.TagName = newTagName;
+                            newSubscription.regexmatch = "";
+                            newSubscription.useregex = false;
+
+                            //Add the subscription back into the in-memory object
+                            _HistorianTags.subscribetags.Add(newSubscription);
+
+                            //And set the local settingsServerTag to the tag we just constructed so it can be used later in the process
+                            settingsServerTag = newSubscription.historianTag;
+
+                            // Add to the in-memory list so we don't have to repeat this
+                            //_HistorianTags.subscribetags.Add(newSubscription);
+
+                            // Now get the tag key back
+                            //tagKey = GetHistorianTagKey(topic);
+
+                            // exit the foreach
+                            break;
+                        }
+                    }
+                }
+
 
                 // If we already have a key then use that
                 if (settingsServerTag.TagKey > 0)
@@ -443,17 +539,21 @@ namespace aaMQTTtoHistorian
 
                 if(!result)
                 {
-                    if (error.ErrorCode != HistorianAccessError.ErrorValue.FailedToGetFromServer)
-                    {
-                        throw new Exception(error.ErrorDescription);
-                    }
+                   // Couldn't find tag so just keep going
                 }
                 
                 // If the tag already exists, stick it back into the in memory object
                 if(serverTag.TagKey > 0)
                 {
-                    // Set the data back into the in memory object
-                    _HistorianTags.subscribetags.Find(x => x.topic.Equals(topic)).historianTag = serverTag;
+                    try
+                    {
+                        // Set the data back into the in memory object
+                        _HistorianTags.subscribetags.First(x => x.topic.Equals(topic)).historianTag = serverTag;
+                    }
+                    catch(Exception ex)
+                    {
+                        log.Error(ex);
+                    }
                 }
                 else
                 {
@@ -462,15 +562,25 @@ namespace aaMQTTtoHistorian
                 }
 
                 // Now "Add" to the historian which really just gives us a handle back
+                log.DebugFormat("Adding {0} to historian.", serverTag.TagName);
                 result = _historian.AddTag(serverTag, out tagKey, out error);
+
+                // The actual status of the tag addition will be checked later when the application attempts to write a tag
 
                 if (!result)
                 {
                     throw new Exception(error.ErrorDescription);
                 }
 
-                // Finally set the data on the in-memory object with the tag key                
-                _HistorianTags.subscribetags.Find(x => x.topic.Equals(topic)).historianTag.TagKey = tagKey;
+                try
+                {
+                    // Finally set the data on the in-memory object with the tag key                
+                    _HistorianTags.subscribetags.First(x => x.topic.Equals(topic)).historianTag.TagKey = tagKey;
+                }
+                catch(Exception ex)
+                {
+                    log.Error(ex);
+                }
 
                 //And set the return value
                 returnValue = tagKey;
